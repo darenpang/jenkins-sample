@@ -1,0 +1,8 @@
+---
+- name: Deploy placeholder
+  hosts: "{{ target_group | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Deploy stage placeholder
+      ansible.builtin.debug:
+        msg: "Deploy stage is not implemented yet."

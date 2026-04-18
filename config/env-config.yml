@@ -1,0 +1,35 @@
+vault:
+  vault_credentials_id: jenkins_deploy_vault_credentials
+  vaulted_var_file: vars/vault/sis_pubkey.yml
+  vaulted_var_name: sis_pubkey
+
+profiles:
+  NonProd-tksis01d:
+    inventory_group: NonProd
+    login_user: tksis01d
+    password_credential_id: sis_tksis01d_password_nonprod
+    ssh_key_credential_id: sis_tksis01d_ed25519_nonprod
+
+  NonProd-tksis02d:
+    inventory_group: NonProd
+    login_user: tksis02d
+    password_credential_id: sis_tksis02d_password_nonprod
+    ssh_key_credential_id: sis_tksis02d_ed25519_nonprod
+
+  NonProd-tksis03d:
+    inventory_group: NonProd
+    login_user: tksis03d
+    password_credential_id: sis_tksis03d_password_nonprod
+    ssh_key_credential_id: sis_tksis03d_ed25519_nonprod
+
+  PreProd-tksis01d:
+    inventory_group: PreProd
+    login_user: tksis01d
+    password_credential_id: sis_tksis01d_password_preprod
+    ssh_key_credential_id: sis_tksis01d_ed25519_preprod
+
+  Prod-tksis01d:
+    inventory_group: Prod
+    login_user: tksis01d
+    password_credential_id: sis_tksis01d_password_prod
+    ssh_key_credential_id: sis_tksis01d_ed25519_prod

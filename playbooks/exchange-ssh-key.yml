@@ -1,0 +1,15 @@
+---
+- name: Exchange SSH key
+  hosts: "{{ target_group }}"
+  gather_facts: false
+  remote_user: "{{ login_user }}"
+  vars_files:
+    - "{{ vaulted_var_file }}"
+  vars:
+    resolved_public_key: "{{ lookup('vars', vaulted_var_name) }}"
+  tasks:
+    - name: Install common public key for the login user
+      ansible.posix.authorized_key:
+        user: "{{ login_user }}"
+        state: present
+        key: "{{ resolved_public_key }}"

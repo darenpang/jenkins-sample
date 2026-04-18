@@ -1,0 +1,15 @@
+all:
+  children:
+    NonProd:
+      hosts:
+        jpn00001:
+
+    PreProd:
+      hosts:
+        jpn10001:
+        jpn10002:
+
+    Prod:
+      hosts:
+        jpn20001:
+        jpn20002:
