@@ -47,6 +47,12 @@ pipeline {
           if (!fileExists(env.CONFIG_FILE)) {
             error("Missing pipeline config file: ${env.CONFIG_FILE}")
           }
+          if (!fileExists(env.INVENTORY_FILE)) {
+            error("Missing Ansible inventory file: ${env.INVENTORY_FILE}")
+          }
+          if (!fileExists(env.DEPLOY_PLAYBOOK)) {
+            error("Missing Deploy playbook: ${env.DEPLOY_PLAYBOOK}")
+          }
           def config = readYaml file: env.CONFIG_FILE
           if (!(config instanceof Map)) {
             error("Invalid YAML structure in ${env.CONFIG_FILE}")
@@ -101,9 +107,6 @@ pipeline {
       }
       steps {
         script {
-          if (!fileExists(env.INVENTORY_FILE)) {
-            error("Missing Ansible inventory file: ${env.INVENTORY_FILE}")
-          }
           if (!fileExists(env.EXCHANGE_PLAYBOOK)) {
             error("Missing Exchange SSH Key playbook: ${env.EXCHANGE_PLAYBOOK}")
           }
@@ -137,7 +140,25 @@ pipeline {
 
     stage('Deploy') {
       steps {
-        echo "TODO: implement Deploy stage for ${params.TARGET_PROFILE} using ${env.DEPLOY_CREDENTIAL_ID}"
+        script {
+          def playbookArgs = [
+            installation : env.ANSIBLE_INSTALLATION,
+            inventory    : env.INVENTORY_FILE,
+            playbook     : env.DEPLOY_PLAYBOOK,
+            credentialsId: env.DEPLOY_CREDENTIAL_ID,
+            colorized    : true,
+            extraVars    : [
+              target_group: env.TARGET_GROUP,
+              login_user  : env.LOGIN_USER
+            ]
+          ]
+
+          if (env.ANSIBLE_LIMIT_VALUE) {
+            playbookArgs.limit = env.ANSIBLE_LIMIT_VALUE
+          }
+
+          ansiblePlaybook(playbookArgs)
+        }
       }
     }
   }

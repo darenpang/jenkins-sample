@@ -1,8 +1,12 @@
 ---
-- name: Deploy placeholder
-  hosts: "{{ target_group | default('all') }}"
+- name: Deploy connectivity check
+  hosts: "{{ target_group }}"
   gather_facts: false
+  remote_user: "{{ login_user }}"
   tasks:
-    - name: Deploy stage placeholder
-      ansible.builtin.debug:
-        msg: "Deploy stage is not implemented yet."
+    - name: Ping target host
+      ping:
+
+    - name: Print deploy connectivity message
+      debug:
+        msg: "Deploy connectivity check succeeded on {{ inventory_hostname }} as {{ login_user }}"
