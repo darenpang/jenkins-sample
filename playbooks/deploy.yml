@@ -1,12 +1,130 @@
 ---
-- name: Deploy connectivity check
+- name: Deploy application bundle
   hosts: "{{ target_group }}"
-  gather_facts: false
+  gather_facts: true
   remote_user: "{{ login_user }}"
+  vars:
+    deploy_root: "{{ ansible_env.HOME }}/.sis_bt_deploy"
+    work_dir: "{{ deploy_root }}/work"
+    backup_root: "{{ deploy_root }}/backup"
+    latest_backup_root: "{{ backup_root }}/latest"
+    artifact_archive: "{{ work_dir }}/package.tar.gz"
+    extracted_dir: "{{ work_dir }}/sis"
+    target_parent_dir: "{{ ansible_env.HOME }}/project"
+    target_dir: "{{ target_parent_dir }}/sis"
   tasks:
-    - name: Ping target host
-      ping:
-
-    - name: Print deploy connectivity message
+    - name: Print deploy start message
       debug:
-        msg: "Deploy connectivity check succeeded on {{ inventory_hostname }} as {{ login_user }}"
+        msg:
+          - "Deploy target host: {{ inventory_hostname }}"
+          - "Deploy login user: {{ login_user }}"
+          - "Deploy artifact URL: {{ sis_bt_nexus_url }}"
+
+    - name: Collect current deploy directory status
+      stat:
+        path: "{{ target_dir }}"
+      register: target_dir_stat
+
+    - name: Remove previous work directory
+      file:
+        path: "{{ work_dir }}"
+        state: absent
+
+    - name: Recreate work directory
+      file:
+        path: "{{ work_dir }}"
+        state: directory
+        mode: '0775'
+
+    - name: Ensure backup root exists
+      file:
+        path: "{{ backup_root }}"
+        state: directory
+        mode: '0775'
+
+    - name: Download deploy archive
+      get_url:
+        url: "{{ sis_bt_nexus_url }}"
+        dest: "{{ artifact_archive }}"
+        mode: '0664'
+        force: true
+
+    - name: Extract deploy archive
+      unarchive:
+        src: "{{ artifact_archive }}"
+        dest: "{{ work_dir }}"
+        remote_src: true
+
+    - name: Check extracted sis directory
+      stat:
+        path: "{{ extracted_dir }}"
+      register: extracted_dir_stat
+
+    - name: Validate extracted sis directory
+      assert:
+        that:
+          - extracted_dir_stat.stat.exists
+          - extracted_dir_stat.stat.isdir
+        fail_msg: "Expected {{ extracted_dir }} after archive extraction."
+
+    - name: Remove previous latest backup
+      file:
+        path: "{{ latest_backup_root }}"
+        state: absent
+      when: target_dir_stat.stat.exists
+
+    - name: Recreate latest backup root
+      file:
+        path: "{{ latest_backup_root }}"
+        state: directory
+        mode: '0775'
+      when: target_dir_stat.stat.exists
+
+    - name: Backup current deploy directory to latest
+      command:
+        argv:
+          - cp
+          - -a
+          - "{{ target_dir }}"
+          - "{{ latest_backup_root }}/"
+      when: target_dir_stat.stat.exists
+
+    - name: Print latest backup completion message
+      debug:
+        msg: "Current deploy directory was backed up to {{ latest_backup_root }}"
+      when: target_dir_stat.stat.exists
+
+    - name: Ensure target parent directory exists
+      file:
+        path: "{{ target_parent_dir }}"
+        state: directory
+        mode: '0775'
+
+    - name: Ensure target directory exists
+      file:
+        path: "{{ target_dir }}"
+        state: directory
+        mode: '0775'
+
+    - name: Synchronize extracted sis directory
+      command:
+        argv:
+          - rsync
+          - -a
+          - --delete
+          - "{{ extracted_dir }}/"
+          - "{{ target_dir }}/"
+
+    - name: Apply deploy directory permissions
+      file:
+        path: "{{ target_dir }}"
+        state: directory
+        mode: '0775'
+        recurse: true
+
+    - name: Print deploy completion message
+      debug:
+        msg:
+          - "Deploy completed on {{ inventory_hostname }}"
+          - "Target directory: {{ target_dir }}"
+          - "Latest backup root: {{ latest_backup_root }}"

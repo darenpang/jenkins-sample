@@ -27,6 +27,11 @@ pipeline {
       defaultValue: '',
       description: 'Optional Ansible --limit value. Leave empty to target the full profile group.'
     )
+    string(
+      name: 'SIS_BT_NEXUS_URL',
+      defaultValue: '',
+      description: 'Artifact download URL for the deploy tar.gz package.'
+    )
   }
 
   environment {
@@ -97,6 +102,7 @@ pipeline {
           echo "Resolved deploy_credential_id=${env.DEPLOY_CREDENTIAL_ID}"
           echo "Resolved vault_credential_id=${env.VAULT_CREDENTIAL_ID}"
           echo "Resolved vaulted_var_file=${env.VAULTED_VAR_FILE}"
+          echo "Resolved nexus_url=${params.SIS_BT_NEXUS_URL ?: '(empty)'}"
         }
       }
     }
@@ -141,6 +147,10 @@ pipeline {
     stage('Deploy') {
       steps {
         script {
+          if (!params.SIS_BT_NEXUS_URL?.trim()) {
+            error('SIS_BT_NEXUS_URL is required for the Deploy stage.')
+          }
+
           def playbookArgs = [
             installation : env.ANSIBLE_INSTALLATION,
             inventory    : env.INVENTORY_FILE,
@@ -148,8 +158,9 @@ pipeline {
             credentialsId: env.DEPLOY_CREDENTIAL_ID,
             colorized    : true,
             extraVars    : [
-              target_group: env.TARGET_GROUP,
-              login_user  : env.LOGIN_USER
+              target_group     : env.TARGET_GROUP,
+              login_user       : env.LOGIN_USER,
+              sis_bt_nexus_url : params.SIS_BT_NEXUS_URL
             ]
           ]
 
