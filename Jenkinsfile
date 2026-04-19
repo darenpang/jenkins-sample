@@ -22,6 +22,11 @@ pipeline {
       defaultValue: false,
       description: 'When enabled, Exchange SSH Key runs before Deploy.'
     )
+    booleanParam(
+      name: 'DRY_RUN',
+      defaultValue: false,
+      description: 'When enabled, skip execution stages after Prepare Config.'
+    )
     string(
       name: 'ANSIBLE_LIMIT',
       defaultValue: '',
@@ -46,7 +51,8 @@ pipeline {
     stage('Prepare Config') {
       steps {
         script {
-          currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.TARGET_PROFILE}"
+          def dryRunSuffix = params.DRY_RUN ? ' [DRY RUN]' : ''
+          currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.TARGET_PROFILE}${dryRunSuffix}"
           def workspaceRoot = pwd()
 
           if (!fileExists(env.CONFIG_FILE)) {
@@ -103,13 +109,14 @@ pipeline {
           echo "Resolved vault_credential_id=${env.VAULT_CREDENTIAL_ID}"
           echo "Resolved vaulted_var_file=${env.VAULTED_VAR_FILE}"
           echo "Resolved nexus_url=${params.SIS_BT_NEXUS_URL ?: '(empty)'}"
+          echo "Resolved dry_run=${params.DRY_RUN}"
         }
       }
     }
 
     stage('Exchange SSH Key') {
       when {
-        expression { params.RUN_KEY_EXCHANGE }
+        expression { !params.DRY_RUN && params.RUN_KEY_EXCHANGE }
       }
       steps {
         script {
@@ -145,6 +152,9 @@ pipeline {
     }
 
     stage('Deploy') {
+      when {
+        expression { !params.DRY_RUN }
+      }
       steps {
         script {
           if (!params.SIS_BT_NEXUS_URL?.trim()) {
