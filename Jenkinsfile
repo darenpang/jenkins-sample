@@ -42,6 +42,7 @@ pipeline {
       steps {
         script {
           currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.TARGET_PROFILE}"
+          def workspaceRoot = pwd()
 
           if (!fileExists(env.CONFIG_FILE)) {
             error("Missing pipeline config file: ${env.CONFIG_FILE}")
@@ -78,7 +79,8 @@ pipeline {
           env.EXCHANGE_CREDENTIAL_ID = profileConfig.password_credential_id.toString()
           env.DEPLOY_CREDENTIAL_ID = profileConfig.ssh_key_credential_id.toString()
           env.VAULT_CREDENTIAL_ID = vaultConfig.vault_credentials_id.toString()
-          env.VAULTED_VAR_FILE = vaultConfig.vaulted_var_file.toString()
+          env.VAULTED_VAR_FILE_RELATIVE = vaultConfig.vaulted_var_file.toString()
+          env.VAULTED_VAR_FILE = "${workspaceRoot}/${env.VAULTED_VAR_FILE_RELATIVE}".replace('\\', '/')
           env.VAULTED_VAR_NAME = vaultConfig.vaulted_var_name.toString()
           env.ANSIBLE_LIMIT_VALUE = params.ANSIBLE_LIMIT?.trim() ?: ''
 
@@ -88,6 +90,7 @@ pipeline {
           echo "Resolved exchange_credential_id=${env.EXCHANGE_CREDENTIAL_ID}"
           echo "Resolved deploy_credential_id=${env.DEPLOY_CREDENTIAL_ID}"
           echo "Resolved vault_credential_id=${env.VAULT_CREDENTIAL_ID}"
+          echo "Resolved vaulted_var_file=${env.VAULTED_VAR_FILE}"
         }
       }
     }
@@ -104,8 +107,8 @@ pipeline {
           if (!fileExists(env.EXCHANGE_PLAYBOOK)) {
             error("Missing Exchange SSH Key playbook: ${env.EXCHANGE_PLAYBOOK}")
           }
-          if (!fileExists(env.VAULTED_VAR_FILE)) {
-            error("Missing vaulted variable file: ${env.VAULTED_VAR_FILE}")
+          if (!fileExists(env.VAULTED_VAR_FILE_RELATIVE)) {
+            error("Missing vaulted variable file: ${env.VAULTED_VAR_FILE_RELATIVE}")
           }
 
           def playbookArgs = [
