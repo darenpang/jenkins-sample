@@ -64,8 +64,8 @@
     - name: Normalize image ids
       set_fact:
         source_image_id: "{{ source_image_info.images[0].Id }}"
-        local_version_image_id: "{{ (local_version_image_info.images | map(attribute='Id') | list | first) | default('') }}"
-        local_latest_image_id: "{{ (local_latest_image_info.images | map(attribute='Id') | list | first) | default('') }}"
+        local_version_image_id: "{{ local_version_image_info.images[0].Id if (local_version_image_info.images | length == 1) else '' }}"
+        local_latest_image_id: "{{ local_latest_image_info.images[0].Id if (local_latest_image_info.images | length == 1) else '' }}"
 
     # ============================================================
     # version tag:
