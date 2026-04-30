@@ -1,0 +1,123 @@
+- hosts: all
+  become: true
+
+  vars:
+    # 本地 registry 前缀，Jenkins 不需要传
+    local_registry: "localhost"
+
+    # 例：
+    # sis_bt_java_image_url_without_tag = registry.example.com/project/sis-bt-java
+    # local_image_path                 = project/sis-bt-java
+    # local_image_url_without_tag      = localhost/project/sis-bt-java
+    local_image_path: "{{ sis_bt_java_image_url_without_tag | regex_replace('^[^/]+/', '') }}"
+    local_image_url_without_tag: "{{ local_registry }}/{{ local_image_path }}"
+
+    local_version_image_url_with_tag: "{{ local_image_url_without_tag }}:{{ imageTag }}"
+    local_latest_image_url_with_tag: "{{ local_image_url_without_tag }}:latest"
+
+  tasks:
+    - name: Show deploy parameters
+      debug:
+        msg:
+          - "Deploy target host: {{ inventory_hostname }}"
+          - "Deploy login user: {{ login_user }}"
+          - "Deploy container registry URL: {{ sis_bt_java_image_url_with_tag }}"
+          - "Deploy container registry URL without tag: {{ sis_bt_java_image_url_without_tag }}"
+          - "Deploy imageName: {{ imageName }}"
+          - "Deploy imageTag: {{ imageTag }}"
+          - "Deploy local_image_url_without_tag: {{ local_image_url_without_tag }}"
+          - "Deploy local_version_image_url_with_tag: {{ local_version_image_url_with_tag }}"
+          - "Deploy local_latest_image_url_with_tag: {{ local_latest_image_url_with_tag }}"
+
+    - name: Pull source image
+      podman_image:
+        name: "{{ sis_bt_java_image_url_with_tag }}"
+        state: present
+        force: false
+
+    - name: Gather source image info
+      podman_image_info:
+        name:
+          - "{{ sis_bt_java_image_url_with_tag }}"
+      register: source_image_info
+
+    - name: Gather local version image info
+      podman_image_info:
+        name:
+          - "{{ local_version_image_url_with_tag }}"
+      register: local_version_image_info
+
+    - name: Gather local latest image info
+      podman_image_info:
+        name:
+          - "{{ local_latest_image_url_with_tag }}"
+      register: local_latest_image_info
+
+    - name: Validate source image exists after pull
+      assert:
+        that:
+          - source_image_info.images | length == 1
+        fail_msg: >-
+          Source image {{ sis_bt_java_image_url_with_tag }} was pulled,
+          but podman_image_info could not find exactly one matching image.
+
+    - name: Normalize image ids
+      set_fact:
+        source_image_id: "{{ source_image_info.images[0].Id }}"
+        local_version_image_id: "{{ (local_version_image_info.images | map(attribute='Id') | list | first) | default('') }}"
+        local_latest_image_id: "{{ (local_latest_image_info.images | map(attribute='Id') | list | first) | default('') }}"
+
+    # ============================================================
+    # version tag:
+    #   不存在 -> 创建
+    #   已存在且指向同一个 image -> 不动
+    #   已存在但指向不同 image -> fail
+    # ============================================================
+
+    - name: Fail if local version tag points to a different image
+      assert:
+        that:
+          - local_version_image_id == '' or local_version_image_id == source_image_id
+        fail_msg: >-
+          Local version tag {{ local_version_image_url_with_tag }} already exists
+          but points to {{ local_version_image_id }},
+          not {{ source_image_id }}.
+          Version tags are expected to be immutable.
+
+    - name: Create local version tag
+      command:
+        argv:
+          - podman
+          - tag
+          - "{{ sis_bt_java_image_url_with_tag }}"
+          - "{{ local_version_image_url_with_tag }}"
+      when: local_version_image_id == ''
+
+    # ============================================================
+    # latest tag:
+    #   不存在 -> 创建
+    #   已存在且指向同一个 image -> 不动
+    #   已存在但指向不同 image -> untag old latest，然后重新 tag
+    # ============================================================
+
+    - name: Remove local latest tag from old image
+      command:
+        argv:
+          - podman
+          - image
+          - untag
+          - "{{ local_latest_image_id }}"
+          - "{{ local_latest_image_url_with_tag }}"
+      when:
+        - local_latest_image_id != ''
+        - local_latest_image_id != source_image_id
+
+    - name: Create or update local latest tag
+      command:
+        argv:
+          - podman
+          - tag
+          - "{{ sis_bt_java_image_url_with_tag }}"
+          - "{{ local_latest_image_url_with_tag }}"
+      when:
+        - local_latest_image_id == '' or local_latest_image_id != source_image_id
