@@ -13,7 +13,7 @@ pipeline {
         'NonProd-tksis02d',
         'NonProd-tksis03d',
         'PreProd-tksis01d',
-        'Prod-tksis01d'
+        'Prod'
       ],
       description: 'Select the target environment and login user profile.'
     )
@@ -77,7 +77,8 @@ pipeline {
           }
 
           def requiredVaultKeys = ['vault_credentials_id', 'vaulted_var_file', 'vaulted_var_name']
-          def requiredProfileKeys = ['inventory_group', 'login_user', 'password_credential_id', 'ssh_key_credential_id']
+          def requiredProfileKeys = ['inventory_group']
+          def requiredCredentialGroupKeys = ['name', 'limit', 'login_user', 'password_credential_id', 'ssh_key_credential_id']
 
           requiredVaultKeys.each { key ->
             if (!vaultConfig[key]?.toString()?.trim()) {
@@ -91,10 +92,35 @@ pipeline {
             }
           }
 
+          def credentialGroups = profileConfig.credential_groups
+          if (credentialGroups == null) {
+            credentialGroups = [[
+              name                  : params.TARGET_PROFILE,
+              limit                 : profileConfig.inventory_group,
+              login_user            : profileConfig.login_user,
+              password_credential_id: profileConfig.password_credential_id,
+              ssh_key_credential_id : profileConfig.ssh_key_credential_id
+            ]]
+          }
+
+          if (!(credentialGroups instanceof List) || credentialGroups.isEmpty()) {
+            error("profiles.${params.TARGET_PROFILE}.credential_groups must be a non-empty list in ${env.CONFIG_FILE}")
+          }
+
+          credentialGroups.eachWithIndex { group, index ->
+            if (!(group instanceof Map)) {
+              error("profiles.${params.TARGET_PROFILE}.credential_groups[${index}] must be a map in ${env.CONFIG_FILE}")
+            }
+
+            requiredCredentialGroupKeys.each { key ->
+              if (!group[key]?.toString()?.trim()) {
+                error("Missing profiles.${params.TARGET_PROFILE}.credential_groups[${index}].${key} in ${env.CONFIG_FILE}")
+              }
+            }
+          }
+
           env.TARGET_GROUP = profileConfig.inventory_group.toString()
-          env.LOGIN_USER = profileConfig.login_user.toString()
-          env.EXCHANGE_CREDENTIAL_ID = profileConfig.password_credential_id.toString()
-          env.DEPLOY_CREDENTIAL_ID = profileConfig.ssh_key_credential_id.toString()
+          env.CREDENTIAL_GROUPS_JSON = groovy.json.JsonOutput.toJson(credentialGroups)
           env.VAULT_CREDENTIAL_ID = vaultConfig.vault_credentials_id.toString()
           env.VAULTED_VAR_FILE_RELATIVE = vaultConfig.vaulted_var_file.toString()
           env.VAULTED_VAR_FILE = "${workspaceRoot}/${env.VAULTED_VAR_FILE_RELATIVE}".replace('\\', '/')
@@ -103,9 +129,7 @@ pipeline {
 
           echo "Resolved TARGET_PROFILE=${params.TARGET_PROFILE}"
           echo "Resolved inventory_group=${env.TARGET_GROUP}"
-          echo "Resolved login_user=${env.LOGIN_USER}"
-          echo "Resolved exchange_credential_id=${env.EXCHANGE_CREDENTIAL_ID}"
-          echo "Resolved deploy_credential_id=${env.DEPLOY_CREDENTIAL_ID}"
+          echo "Resolved credential_groups=${credentialGroups.collect { it.name }.join(', ')}"
           echo "Resolved vault_credential_id=${env.VAULT_CREDENTIAL_ID}"
           echo "Resolved vaulted_var_file=${env.VAULTED_VAR_FILE}"
           echo "Resolved nexus_url=${params.SIS_BT_NEXUS_URL ?: '(empty)'}"
@@ -127,26 +151,29 @@ pipeline {
             error("Missing vaulted variable file: ${env.VAULTED_VAR_FILE_RELATIVE}")
           }
 
-          def playbookArgs = [
-            installation      : env.ANSIBLE_INSTALLATION,
-            inventory         : env.INVENTORY_FILE,
-            playbook          : env.EXCHANGE_PLAYBOOK,
-            credentialsId     : env.EXCHANGE_CREDENTIAL_ID,
-            vaultCredentialsId: env.VAULT_CREDENTIAL_ID,
-            colorized         : true,
-            extraVars         : [
-              target_group    : env.TARGET_GROUP,
-              login_user      : env.LOGIN_USER,
-              vaulted_var_file: env.VAULTED_VAR_FILE,
-              vaulted_var_name: env.VAULTED_VAR_NAME
+          def credentialGroups = readJSON text: env.CREDENTIAL_GROUPS_JSON
+          credentialGroups.each { group ->
+            def effectiveLimit = env.ANSIBLE_LIMIT_VALUE ? "${group.limit}:&${env.ANSIBLE_LIMIT_VALUE}" : group.limit
+            echo "Running Exchange SSH Key for credential group ${group.name} with limit ${effectiveLimit}"
+
+            def playbookArgs = [
+              installation      : env.ANSIBLE_INSTALLATION,
+              inventory         : env.INVENTORY_FILE,
+              playbook          : env.EXCHANGE_PLAYBOOK,
+              credentialsId     : group.password_credential_id,
+              vaultCredentialsId: env.VAULT_CREDENTIAL_ID,
+              colorized         : true,
+              limit             : effectiveLimit,
+              extraVars         : [
+                target_group    : env.TARGET_GROUP,
+                login_user      : group.login_user,
+                vaulted_var_file: env.VAULTED_VAR_FILE,
+                vaulted_var_name: env.VAULTED_VAR_NAME
+              ]
             ]
-          ]
 
-          if (env.ANSIBLE_LIMIT_VALUE) {
-            playbookArgs.limit = env.ANSIBLE_LIMIT_VALUE
+            ansiblePlaybook(playbookArgs)
           }
-
-          ansiblePlaybook(playbookArgs)
         }
       }
     }
@@ -161,24 +188,27 @@ pipeline {
             error('SIS_BT_NEXUS_URL is required for the Deploy stage.')
           }
 
-          def playbookArgs = [
-            installation : env.ANSIBLE_INSTALLATION,
-            inventory    : env.INVENTORY_FILE,
-            playbook     : env.DEPLOY_PLAYBOOK,
-            credentialsId: env.DEPLOY_CREDENTIAL_ID,
-            colorized    : true,
-            extraVars    : [
-              target_group     : env.TARGET_GROUP,
-              login_user       : env.LOGIN_USER,
-              sis_bt_nexus_url : params.SIS_BT_NEXUS_URL
+          def credentialGroups = readJSON text: env.CREDENTIAL_GROUPS_JSON
+          credentialGroups.each { group ->
+            def effectiveLimit = env.ANSIBLE_LIMIT_VALUE ? "${group.limit}:&${env.ANSIBLE_LIMIT_VALUE}" : group.limit
+            echo "Running Deploy for credential group ${group.name} with limit ${effectiveLimit}"
+
+            def playbookArgs = [
+              installation : env.ANSIBLE_INSTALLATION,
+              inventory    : env.INVENTORY_FILE,
+              playbook     : env.DEPLOY_PLAYBOOK,
+              credentialsId: group.ssh_key_credential_id,
+              colorized    : true,
+              limit        : effectiveLimit,
+              extraVars    : [
+                target_group    : env.TARGET_GROUP,
+                login_user      : group.login_user,
+                sis_bt_nexus_url: params.SIS_BT_NEXUS_URL
+              ]
             ]
-          ]
 
-          if (env.ANSIBLE_LIMIT_VALUE) {
-            playbookArgs.limit = env.ANSIBLE_LIMIT_VALUE
+            ansiblePlaybook(playbookArgs)
           }
-
-          ansiblePlaybook(playbookArgs)
         }
       }
     }

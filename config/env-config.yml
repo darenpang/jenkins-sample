@@ -28,8 +28,17 @@ profiles:
     password_credential_id: sis_tksis01d_password_preprod
     ssh_key_credential_id: sis_tksis01d_ed25519_preprod
 
-  Prod-tksis01d:
+  Prod:
     inventory_group: Prod
-    login_user: tksis01d
-    password_credential_id: sis_tksis01d_password_prod
-    ssh_key_credential_id: sis_tksis01d_ed25519_prod
+    credential_groups:
+      - name: prod-tksis01d
+        limit: jpn20001
+        login_user: tksis01d
+        password_credential_id: sis_tksis01d_password_prod
+        ssh_key_credential_id: sis_tksis01d_ed25519_prod
+
+      - name: prod-tksis02d
+        limit: jpn20002
+        login_user: tksis02d
+        password_credential_id: sis_tksis02d_password_prod
+        ssh_key_credential_id: sis_tksis02d_ed25519_prod
