@@ -152,13 +152,16 @@ pipeline {
 
           def config = readYaml file: env.CONFIG_FILE
           def profileConfig = config.profiles."${params.TARGET_PROFILE}"
-          def credentialGroups = profileConfig.credential_groups ?: [[
-            name                  : params.TARGET_PROFILE,
-            limit                 : profileConfig.inventory_group,
-            login_user            : profileConfig.login_user,
-            password_credential_id: profileConfig.password_credential_id,
-            ssh_key_credential_id : profileConfig.ssh_key_credential_id
-          ]]
+          def credentialGroups = profileConfig.credential_groups
+          if (credentialGroups == null) {
+            credentialGroups = [[
+              name                  : params.TARGET_PROFILE,
+              limit                 : profileConfig.inventory_group,
+              login_user            : profileConfig.login_user,
+              password_credential_id: profileConfig.password_credential_id,
+              ssh_key_credential_id : profileConfig.ssh_key_credential_id
+            ]]
+          }
 
           credentialGroups.each { group ->
             def effectiveLimit = env.ANSIBLE_LIMIT_VALUE ? "${group.limit}:&${env.ANSIBLE_LIMIT_VALUE}" : group.limit
@@ -198,13 +201,16 @@ pipeline {
 
           def config = readYaml file: env.CONFIG_FILE
           def profileConfig = config.profiles."${params.TARGET_PROFILE}"
-          def credentialGroups = profileConfig.credential_groups ?: [[
-            name                  : params.TARGET_PROFILE,
-            limit                 : profileConfig.inventory_group,
-            login_user            : profileConfig.login_user,
-            password_credential_id: profileConfig.password_credential_id,
-            ssh_key_credential_id : profileConfig.ssh_key_credential_id
-          ]]
+          def credentialGroups = profileConfig.credential_groups
+          if (credentialGroups == null) {
+            credentialGroups = [[
+              name                  : params.TARGET_PROFILE,
+              limit                 : profileConfig.inventory_group,
+              login_user            : profileConfig.login_user,
+              password_credential_id: profileConfig.password_credential_id,
+              ssh_key_credential_id : profileConfig.ssh_key_credential_id
+            ]]
+          }
 
           credentialGroups.each { group ->
             def effectiveLimit = env.ANSIBLE_LIMIT_VALUE ? "${group.limit}:&${env.ANSIBLE_LIMIT_VALUE}" : group.limit
