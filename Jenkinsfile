@@ -120,7 +120,6 @@ pipeline {
           }
 
           env.TARGET_GROUP = profileConfig.inventory_group.toString()
-          env.CREDENTIAL_GROUPS_JSON = groovy.json.JsonOutput.toJson(credentialGroups)
           env.VAULT_CREDENTIAL_ID = vaultConfig.vault_credentials_id.toString()
           env.VAULTED_VAR_FILE_RELATIVE = vaultConfig.vaulted_var_file.toString()
           env.VAULTED_VAR_FILE = "${workspaceRoot}/${env.VAULTED_VAR_FILE_RELATIVE}".replace('\\', '/')
@@ -151,7 +150,16 @@ pipeline {
             error("Missing vaulted variable file: ${env.VAULTED_VAR_FILE_RELATIVE}")
           }
 
-          def credentialGroups = readJSON text: env.CREDENTIAL_GROUPS_JSON
+          def config = readYaml file: env.CONFIG_FILE
+          def profileConfig = config.profiles."${params.TARGET_PROFILE}"
+          def credentialGroups = profileConfig.credential_groups ?: [[
+            name                  : params.TARGET_PROFILE,
+            limit                 : profileConfig.inventory_group,
+            login_user            : profileConfig.login_user,
+            password_credential_id: profileConfig.password_credential_id,
+            ssh_key_credential_id : profileConfig.ssh_key_credential_id
+          ]]
+
           credentialGroups.each { group ->
             def effectiveLimit = env.ANSIBLE_LIMIT_VALUE ? "${group.limit}:&${env.ANSIBLE_LIMIT_VALUE}" : group.limit
             echo "Running Exchange SSH Key for credential group ${group.name} with limit ${effectiveLimit}"
@@ -188,7 +196,16 @@ pipeline {
             error('SIS_BT_NEXUS_URL is required for the Deploy stage.')
           }
 
-          def credentialGroups = readJSON text: env.CREDENTIAL_GROUPS_JSON
+          def config = readYaml file: env.CONFIG_FILE
+          def profileConfig = config.profiles."${params.TARGET_PROFILE}"
+          def credentialGroups = profileConfig.credential_groups ?: [[
+            name                  : params.TARGET_PROFILE,
+            limit                 : profileConfig.inventory_group,
+            login_user            : profileConfig.login_user,
+            password_credential_id: profileConfig.password_credential_id,
+            ssh_key_credential_id : profileConfig.ssh_key_credential_id
+          ]]
+
           credentialGroups.each { group ->
             def effectiveLimit = env.ANSIBLE_LIMIT_VALUE ? "${group.limit}:&${env.ANSIBLE_LIMIT_VALUE}" : group.limit
             echo "Running Deploy for credential group ${group.name} with limit ${effectiveLimit}"
